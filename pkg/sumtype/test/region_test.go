@@ -4,33 +4,48 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRegion(t *testing.T) {
+func TestRegionInternal(t *testing.T) {
 	us, _ := sumtype.NewRegionInternal(sumtype.USRegion{
 		SSNTail: "1234",
 		Sex:     "f",
 	})
-	runRegionTest(t, us)
+	runRegionTest(t, sumtype.US, us)
 	ca, _ := sumtype.NewRegionInternal(sumtype.CARegion{
 		SINPrefix: "987",
 	})
-	runRegionTest(t, ca)
+	runRegionTest(t, sumtype.CA, ca)
 	mx, _ := sumtype.NewRegionInternal(sumtype.MXRegion{
 		NationalID: "123456789",
 	})
-	runRegionTest(t, mx)
+	runRegionTest(t, sumtype.MX, mx)
 
 }
 
-func runRegionTest(t *testing.T, region sumtype.RegionInternal) {
-	code, err := region.CountryCode()
-	if code.IsZero() || err != nil {
-		t.Error("region country code is zero")
-		return
-	}
+// TODO(sbuzas): round-tripped data is not "equal" UNLESS new region adjacent is created with a pointer.
+// Not sure if it's a assert.Equal limitation
+func TestRegionAdjacent(t *testing.T) {
+	us, _ := sumtype.NewRegionAdjacent(&sumtype.USRegion{
+		SSNTail: "1234",
+		Sex:     "f",
+	})
+	runRegionTest(t, sumtype.US, us)
+	ca, _ := sumtype.NewRegionAdjacent(&sumtype.CARegion{
+		SINPrefix: "987",
+	})
+	runRegionTest(t, sumtype.CA, ca)
+	mx, _ := sumtype.NewRegionAdjacent(&sumtype.MXRegion{
+		NationalID: "123456789",
+	})
+	runRegionTest(t, sumtype.MX, mx)
+
+}
+
+func runRegionTest[T any](t *testing.T, code sumtype.CountryCode, region T) {
 	t.Run(code.String(), func(t *testing.T) {
 		t.Parallel()
 		regionBytes, err := json.Marshal(region)
@@ -39,14 +54,15 @@ func runRegionTest(t *testing.T, region sumtype.RegionInternal) {
 		}
 		t.Log("Marshalled Region\n", string(regionBytes))
 
-		var unmarshalledRegion sumtype.RegionInternal
+		var unmarshalledRegion T
 		if err := json.Unmarshal(regionBytes, &unmarshalledRegion); err != nil {
 			t.Fatalf("unable to unmarshal [%s] region", code)
 		}
 
-		assert.Equal(t, region, unmarshalledRegion)
+		if !cmp.Equal(region, unmarshalledRegion) {
+			t.Fatal(cmp.Diff(region, unmarshalledRegion))
+		}
 	})
-
 }
 
 func TestRegion_Embeddable(t *testing.T) {
@@ -73,5 +89,5 @@ func TestRegion_Embeddable(t *testing.T) {
 		t.Fatal("unable to unmarshal", err)
 	}
 
-	assert.Equal(t, obj, unmarshalledObj)
+	assert.EqualValues(t, obj, unmarshalledObj)
 }

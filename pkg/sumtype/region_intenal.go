@@ -57,7 +57,7 @@ func (r *RegionInternal) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-func NewRegionInternal[T IRegion](v T) (RegionInternal, error) {
+func NewRegionInternal[T Region](v T) (RegionInternal, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return RegionInternal{}, err

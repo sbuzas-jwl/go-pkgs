@@ -1,7 +1,8 @@
 package sumtype
 
-//sumtype:decl
-type IRegion interface {
+import "fmt"
+
+type Region interface {
 	CountryCode() CountryCode
 	sealed()
 }
@@ -18,9 +19,25 @@ func (c CountryCode) String() string {
 
 const (
 	US CountryCode = "us"
-	MX             = "mx"
-	CA             = "ca"
+	MX CountryCode = "mx"
+	CA CountryCode = "ca"
 )
+
+func NewRegion(code CountryCode) (Region, error) {
+	var region Region
+	switch code {
+	case CA:
+		region = new(CARegion)
+	case MX:
+		region = new(MXRegion)
+	case US:
+		region = new(USRegion)
+	default:
+		return nil, fmt.Errorf("unknown country code [%s]", code)
+	}
+
+	return region, nil
+}
 
 type USRegion struct {
 	SSNTail string `json:"ssn_tail"`
