@@ -45,6 +45,23 @@ func TestRegionAdjacent(t *testing.T) {
 
 }
 
+func TestRegionExternal(t *testing.T) {
+	us, _ := sumtype.NewRegionExternal(&sumtype.USRegion{
+		SSNTail: "1234",
+		Sex:     "f",
+	})
+	runRegionTest(t, sumtype.US, us)
+	ca, _ := sumtype.NewRegionExternal(&sumtype.CARegion{
+		SINPrefix: "987",
+	})
+	runRegionTest(t, sumtype.CA, ca)
+	mx, _ := sumtype.NewRegionExternal(&sumtype.MXRegion{
+		NationalID: "123456789",
+	})
+	runRegionTest(t, sumtype.MX, mx)
+
+}
+
 func runRegionTest[T any](t *testing.T, code sumtype.CountryCode, region T) {
 	t.Run(code.String(), func(t *testing.T) {
 		t.Parallel()
@@ -59,13 +76,13 @@ func runRegionTest[T any](t *testing.T, code sumtype.CountryCode, region T) {
 			t.Fatalf("unable to unmarshal [%s] region", code)
 		}
 
-		if !cmp.Equal(region, unmarshalledRegion) {
+		if !cmp.Equal(region, unmarshalledRegion, cmp.AllowUnexported(sumtype.RegionInternal{})) {
 			t.Fatal(cmp.Diff(region, unmarshalledRegion))
 		}
 	})
 }
 
-func TestRegion_Embeddable(t *testing.T) {
+func TestRegionInternal_Embeddable(t *testing.T) {
 	type EmbeddedRegionObject struct {
 		Region sumtype.RegionInternal `json:"region"`
 	}
@@ -90,4 +107,64 @@ func TestRegion_Embeddable(t *testing.T) {
 	}
 
 	assert.EqualValues(t, obj, unmarshalledObj)
+}
+
+func TestRegionAdjacent_Embeddable(t *testing.T) {
+	type EmbeddedRegionObject struct {
+		Region sumtype.RegionAdjacent `json:"region"`
+	}
+	us, _ := sumtype.NewRegionAdjacent(&sumtype.USRegion{
+		SSNTail: "1234",
+		Sex:     "f",
+	})
+
+	obj := EmbeddedRegionObject{
+		Region: us,
+	}
+
+	objBytes, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatal("unable to marshal", err)
+	}
+
+	t.Log("Marshalled Embeddable Region\n", string(objBytes))
+
+	var unmarshalledObj EmbeddedRegionObject
+	if err := json.Unmarshal(objBytes, &unmarshalledObj); err != nil {
+		t.Fatal("unable to unmarshal", err)
+	}
+
+	if !cmp.Equal(us, unmarshalledObj.Region) {
+		t.Fatal(cmp.Diff(us, unmarshalledObj.Region))
+	}
+}
+
+func TestRegionExternal_Embeddable(t *testing.T) {
+	type EmbeddedRegionObject struct {
+		Region sumtype.RegionExternal `json:"region"`
+	}
+	us, _ := sumtype.NewRegionExternal(&sumtype.USRegion{
+		SSNTail: "1234",
+		Sex:     "f",
+	})
+
+	obj := EmbeddedRegionObject{
+		Region: us,
+	}
+
+	objBytes, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatal("unable to marshal", err)
+	}
+
+	t.Log("Marshalled Embeddable Region\n", string(objBytes))
+
+	var unmarshalledObj EmbeddedRegionObject
+	if err := json.Unmarshal(objBytes, &unmarshalledObj); err != nil {
+		t.Fatal("unable to unmarshal", err)
+	}
+
+	if !cmp.Equal(us, unmarshalledObj.Region) {
+		t.Fatal(cmp.Diff(us, unmarshalledObj.Region))
+	}
 }
