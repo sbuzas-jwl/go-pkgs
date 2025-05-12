@@ -2,6 +2,7 @@ package sumtype
 
 import (
 	"encoding/json"
+	"errors"
 	"maps"
 	"slices"
 )
@@ -11,6 +12,28 @@ import (
 
 type RegionExternal map[CountryCode]Region
 
+func (r *RegionExternal) CountryCode() (CountryCode, error) {
+	if keyLen := len(*r); keyLen == 0 {
+		return "", errors.New("no country code")
+	} else if keyLen == 1 {
+		// 1 countryCode
+		return slices.Collect(maps.Keys(*r))[0], nil
+	}
+
+	return "", errors.New("multiple-keys region invalid")
+
+}
+
+func (r *RegionExternal) Value() (Region, error) {
+	key, err := r.CountryCode()
+	if err != nil {
+		return nil, err
+	}
+
+	return (*r)[key], nil
+}
+
+// TODO: This is really rough and probably fails in about a dozen cases
 func (r *RegionExternal) UnmarshalJSON(data []byte) error {
 	var typeHint map[CountryCode]json.RawMessage
 	if err := json.Unmarshal(data, &typeHint); err != nil {
