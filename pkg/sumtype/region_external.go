@@ -5,14 +5,16 @@ import (
 	"errors"
 	"maps"
 	"slices"
+
+	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype/regions"
 )
 
 //EX
 //externally tagged: {"delete_object": {"id": "1", "soft_delete": true}}
 
-type RegionExternal map[CountryCode]Region
+type RegionExternal map[regions.CountryCode]regions.Region
 
-func (r *RegionExternal) CountryCode() (CountryCode, error) {
+func (r *RegionExternal) CountryCode() (regions.CountryCode, error) {
 	if keyLen := len(*r); keyLen == 0 {
 		return "", errors.New("no country code")
 	} else if keyLen == 1 {
@@ -24,7 +26,7 @@ func (r *RegionExternal) CountryCode() (CountryCode, error) {
 
 }
 
-func (r *RegionExternal) Value() (Region, error) {
+func (r *RegionExternal) Value() (regions.Region, error) {
 	key, err := r.CountryCode()
 	if err != nil {
 		return nil, err
@@ -35,18 +37,18 @@ func (r *RegionExternal) Value() (Region, error) {
 
 // TODO: This is really rough and probably fails in about a dozen cases
 func (r *RegionExternal) UnmarshalJSON(data []byte) error {
-	var typeHint map[CountryCode]json.RawMessage
+	var typeHint map[regions.CountryCode]json.RawMessage
 	if err := json.Unmarshal(data, &typeHint); err != nil {
 		return err
 	}
 
-	var typeKey CountryCode
+	var typeKey regions.CountryCode
 	if keyLen := len(typeHint); keyLen == 1 {
 		// 1 countryCode
 		typeKey = slices.Collect(maps.Keys(typeHint))[0]
 	}
 
-	region, err := NewRegion(typeKey)
+	region, err := regions.NewByCode(typeKey)
 	if err != nil {
 		return err
 	}
@@ -56,13 +58,13 @@ func (r *RegionExternal) UnmarshalJSON(data []byte) error {
 	}
 
 	*r = RegionExternal{
-		region.CountryCode(): region,
+		regions.CountryCode(region.CountryCode()): region,
 	}
 	return nil
 }
 
-func NewRegionExternal[T Region](v T) (RegionExternal, error) {
+func NewRegionExternal[T regions.Region](v T) (RegionExternal, error) {
 	return RegionExternal{
-		v.CountryCode(): v,
+		regions.CountryCode(v.CountryCode()): v,
 	}, nil
 }

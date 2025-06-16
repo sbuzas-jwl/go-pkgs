@@ -6,68 +6,80 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype"
+	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype/regions"
+	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype/regions/ca"
+	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype/regions/mx"
+	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype/regions/us"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRegionInternal(t *testing.T) {
-	us, _ := sumtype.NewRegionInternal(sumtype.USRegion{
-		SSNTail: "1234",
-		Sex:     "f",
-	})
-	runRegionTest(t, sumtype.US, us)
-	ca, _ := sumtype.NewRegionInternal(sumtype.CARegion{
-		SINPrefix: "987",
-	})
-	runRegionTest(t, sumtype.CA, ca)
-	mx, _ := sumtype.NewRegionInternal(sumtype.MXRegion{
-		NationalID: "123456789",
-	})
-	runRegionTest(t, sumtype.MX, mx)
+func regionsMap() map[regions.CountryCode]regions.Region {
+	var rmap = make(map[regions.CountryCode]regions.Region, 0)
+	add := func(r regions.Region) {
+		rmap[regions.CountryCode(r.CountryCode())] = r
+	}
+	usRegion := regions.New[*us.Region]()
+	usRegion.SSNTail = "1234"
+	usRegion.Sex = us.SexAssignedAtBirth("f")
+	add(usRegion)
+	caRegion := regions.New[*ca.Region]()
+	caRegion.SINPrefix = "987"
+	add(caRegion)
+	mxRegion := regions.New[*mx.Region]()
+	mxRegion.NationalID = "123456789"
+	add(mxRegion)
 
+	return rmap
+}
+
+func TestRegionInternal(t *testing.T) {
+	rmap := regionsMap()
+	container := func(r regions.Region) any {
+		c, _ := sumtype.NewRegionInternal(r)
+		return c
+	}
+	runRegionContainerTest[sumtype.RegionInternal](t, regions.US, container, rmap[regions.US])
+	runRegionContainerTest[sumtype.RegionInternal](t, regions.CA, container, rmap[regions.CA])
+	runRegionContainerTest[sumtype.RegionInternal](t, regions.MX, container, rmap[regions.MX])
 }
 
 // TODO(sbuzas): round-tripped data is not "equal" UNLESS new region adjacent is created with a pointer.
 // Not sure if it's a assert.Equal limitation
 func TestRegionAdjacent(t *testing.T) {
-	us, _ := sumtype.NewRegionAdjacent(&sumtype.USRegion{
-		SSNTail: "1234",
-		Sex:     "f",
-	})
-	runRegionTest(t, sumtype.US, us)
-	ca, _ := sumtype.NewRegionAdjacent(&sumtype.CARegion{
-		SINPrefix: "987",
-	})
-	runRegionTest(t, sumtype.CA, ca)
-	mx, _ := sumtype.NewRegionAdjacent(&sumtype.MXRegion{
-		NationalID: "123456789",
-	})
-	runRegionTest(t, sumtype.MX, mx)
+	rmap := regionsMap()
+	container := func(r regions.Region) any {
+		c, _ := sumtype.NewRegionAdjacent(r)
+		return c
+	}
+	runRegionContainerTest[sumtype.RegionAdjacent](t, regions.US, container, rmap[regions.US])
+	runRegionContainerTest[sumtype.RegionAdjacent](t, regions.CA, container, rmap[regions.CA])
+	runRegionContainerTest[sumtype.RegionAdjacent](t, regions.MX, container, rmap[regions.MX])
 
 }
 
 func TestRegionExternal(t *testing.T) {
-	us, _ := sumtype.NewRegionExternal(&sumtype.USRegion{
-		SSNTail: "1234",
-		Sex:     "f",
-	})
-	runRegionTest(t, sumtype.US, us)
-	ca, _ := sumtype.NewRegionExternal(&sumtype.CARegion{
-		SINPrefix: "987",
-	})
-	runRegionTest(t, sumtype.CA, ca)
-	mx, _ := sumtype.NewRegionExternal(&sumtype.MXRegion{
-		NationalID: "123456789",
-	})
-	runRegionTest(t, sumtype.MX, mx)
-
+	rmap := regionsMap()
+	container := func(r regions.Region) any {
+		c, _ := sumtype.NewRegionExternal(r)
+		return c
+	}
+	runRegionContainerTest[sumtype.RegionExternal](t, regions.US, container, rmap[regions.US])
+	runRegionContainerTest[sumtype.RegionExternal](t, regions.US, container, rmap[regions.CA])
+	runRegionContainerTest[sumtype.RegionExternal](t, regions.US, container, rmap[regions.MX])
 }
 
-func runRegionTest[T any](t *testing.T, code sumtype.CountryCode, region T) {
+func runRegionContainerTest[T any](
+	t *testing.T,
+	code regions.CountryCode,
+	containerFn func(regions.Region) any,
+	data regions.Region,
+) {
 	t.Run(code.String(), func(t *testing.T) {
 		t.Parallel()
-		regionBytes, err := json.Marshal(region)
+		container := containerFn(data)
+		regionBytes, err := json.Marshal(container)
 		if err != nil {
-			t.Fatalf("unable to marshal [%s] region;\n value: %#v", code, region)
+			t.Fatalf("unable to marshal [%s] region;\n value: %#v", code, container)
 		}
 		t.Log("Marshalled Region\n", string(regionBytes))
 
@@ -76,8 +88,8 @@ func runRegionTest[T any](t *testing.T, code sumtype.CountryCode, region T) {
 			t.Fatalf("unable to unmarshal [%s] region", code)
 		}
 
-		if !cmp.Equal(region, unmarshalledRegion, cmp.AllowUnexported(sumtype.RegionInternal{})) {
-			t.Fatal(cmp.Diff(region, unmarshalledRegion))
+		if !cmp.Equal(container, unmarshalledRegion, cmp.AllowUnexported(sumtype.RegionInternal{})) {
+			t.Fatal(cmp.Diff(container, unmarshalledRegion))
 		}
 	})
 }
@@ -86,12 +98,15 @@ func TestRegionInternal_Embeddable(t *testing.T) {
 	type EmbeddedRegionObject struct {
 		Region sumtype.RegionInternal `json:"region"`
 	}
-	us, _ := sumtype.NewRegionInternal(sumtype.USRegion{
-		SSNTail: "1234",
-	})
+
+	region, _ := regions.NewByCode(regions.US)
+	v := region.(*us.Region)
+	v.SSNTail = "1234"
+	v.Sex = us.SexAssignedAtBirth("f")
+	container, _ := sumtype.NewRegionInternal(region)
 
 	obj := EmbeddedRegionObject{
-		Region: us,
+		Region: container,
 	}
 
 	objBytes, err := json.Marshal(obj)
@@ -113,13 +128,14 @@ func TestRegionAdjacent_Embeddable(t *testing.T) {
 	type EmbeddedRegionObject struct {
 		Region sumtype.RegionAdjacent `json:"region"`
 	}
-	us, _ := sumtype.NewRegionAdjacent(&sumtype.USRegion{
-		SSNTail: "1234",
-		Sex:     "f",
-	})
+	region, _ := regions.NewByCode(regions.US)
+	v := region.(*us.Region)
+	v.SSNTail = "1234"
+	v.Sex = us.SexAssignedAtBirth("f")
+	container, _ := sumtype.NewRegionAdjacent(region)
 
 	obj := EmbeddedRegionObject{
-		Region: us,
+		Region: container,
 	}
 
 	objBytes, err := json.Marshal(obj)
@@ -134,8 +150,8 @@ func TestRegionAdjacent_Embeddable(t *testing.T) {
 		t.Fatal("unable to unmarshal", err)
 	}
 
-	if !cmp.Equal(us, unmarshalledObj.Region) {
-		t.Fatal(cmp.Diff(us, unmarshalledObj.Region))
+	if !cmp.Equal(container, unmarshalledObj.Region) {
+		t.Fatal(cmp.Diff(container, unmarshalledObj.Region))
 	}
 }
 
@@ -143,13 +159,14 @@ func TestRegionExternal_Embeddable(t *testing.T) {
 	type EmbeddedRegionObject struct {
 		Region sumtype.RegionExternal `json:"region"`
 	}
-	us, _ := sumtype.NewRegionExternal(&sumtype.USRegion{
-		SSNTail: "1234",
-		Sex:     "f",
-	})
+	region, _ := regions.NewByCode(regions.US)
+	v := region.(*us.Region)
+	v.SSNTail = "1234"
+	v.Sex = us.SexAssignedAtBirth("f")
+	container, _ := sumtype.NewRegionExternal(region)
 
 	obj := EmbeddedRegionObject{
-		Region: us,
+		Region: container,
 	}
 
 	objBytes, err := json.Marshal(obj)
@@ -164,7 +181,7 @@ func TestRegionExternal_Embeddable(t *testing.T) {
 		t.Fatal("unable to unmarshal", err)
 	}
 
-	if !cmp.Equal(us, unmarshalledObj.Region) {
-		t.Fatal(cmp.Diff(us, unmarshalledObj.Region))
+	if !cmp.Equal(container, unmarshalledObj.Region) {
+		t.Fatal(cmp.Diff(container, unmarshalledObj.Region))
 	}
 }

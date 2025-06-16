@@ -2,7 +2,8 @@ package sumtype
 
 import (
 	"encoding/json"
-	"fmt"
+
+	"github.com/sbuzas-jwl/go-pkgs/pkg/sumtype/regions"
 )
 
 // RegionInternal is an internally tagged Region sumtype wrapper.
@@ -10,9 +11,9 @@ type RegionInternal struct {
 	payload json.RawMessage
 }
 
-func (a *RegionInternal) CountryCode() (CountryCode, error) {
+func (a *RegionInternal) CountryCode() (regions.CountryCode, error) {
 	var region struct {
-		Code CountryCode `json:"code"`
+		Code regions.CountryCode `json:"code"`
 	}
 
 	err := json.Unmarshal(a.payload, &region)
@@ -20,24 +21,16 @@ func (a *RegionInternal) CountryCode() (CountryCode, error) {
 	return region.Code, err
 }
 
-func (r *RegionInternal) Value() (any, error) {
+func (r *RegionInternal) Value() (regions.Region, error) {
 	code, err := r.CountryCode()
 	if err != nil {
 		return nil, err
 	}
 
-	var v any
-	switch code {
-	case US:
-		v = new(USRegion)
-	case MX:
-		v = new(MXRegion)
-	case CA:
-		v = new(CARegion)
-	default:
-		return nil, fmt.Errorf("invalid region type: %s", code)
+	v, err := regions.NewByCode(code)
+	if err != nil {
+		return nil, err
 	}
-
 	err = json.Unmarshal(r.payload, v)
 	if err != nil {
 		return nil, err
@@ -57,13 +50,13 @@ func (r *RegionInternal) UnmarshalJSON(data []byte) error {
 	return err
 }
 
-func NewRegionInternal[T Region](v T) (RegionInternal, error) {
+func NewRegionInternal[T regions.Region](v T) (RegionInternal, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return RegionInternal{}, err
 	}
 
-	data, err = addCountryCode(data, v.CountryCode())
+	data, err = addCountryCode(data, regions.CountryCode(v.CountryCode()))
 	if err != nil {
 		return RegionInternal{}, err
 	}
@@ -73,7 +66,7 @@ func NewRegionInternal[T Region](v T) (RegionInternal, error) {
 	}, nil
 }
 
-func addCountryCode(data json.RawMessage, code CountryCode) (json.RawMessage, error) {
+func addCountryCode(data json.RawMessage, code regions.CountryCode) (json.RawMessage, error) {
 	var discriminatedType map[string]any
 	if err := json.Unmarshal(data, &discriminatedType); err != nil {
 		return nil, err
