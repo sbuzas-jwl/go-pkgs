@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sbuzas-jwl/go-pkgs/todo"
 	"golang.org/x/crypto/acme/autocert"
 )
@@ -180,6 +179,6 @@ func ListenAndServeTLSRedirect(domain string) error {
 // ListenAndServeDebug runs an HTTP server with /debug endpoints (e.g. pprof, vars).
 func ListenAndServeDebug() error {
 	h := http.NewServeMux()
-	h.Handle("/metrics", promhttp.Handler())
+	// TODO: metrics exporter endpoint h.Handle("/metrics", promhttp.Handler())
 	return http.ListenAndServe(":6060", h)
 }
