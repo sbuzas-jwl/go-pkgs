@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS users AS (
+  id BLOB PRIMARY KEY, -- 16-byte
+  username TEXT NOT NULL,
+  password BLOB NOT NULL,
+  email TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
