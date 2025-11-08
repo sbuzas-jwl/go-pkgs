@@ -105,24 +105,15 @@ func (m *Main) Run(ctx context.Context) (err error) {
 	// Enable internal debug endpoints.
 	go func() { http.ListenAndServeDebug() }()
 
-	log.Printf("running: url=%q debug=http://localhost:6060 dsn=%q", m.HTTPServer.URL(), m.Config.DB.DSN)
-
 	return nil
 }
 
 const (
 	// DefaultConfigPath is the default path to the application configuration.
-	DefaultConfigPath = "~/todod.conf"
-
-	// DefaultDSN is the default datasource name.
-	DefaultDSN = "~/.todod/db"
+	DefaultConfigPath = "/opt/todo/todod.conf"
 )
 
 type Config struct {
-	DB struct {
-		DSN string `json:"dsn"`
-	} `json:"db"`
-
 	HTTP struct {
 		Addr   string `json:"addr"`
 		Domain string `json:"domain"`
@@ -132,7 +123,6 @@ type Config struct {
 // DefaultConfig returns a new instance of Config with defaults set.
 func DefaultConfig() Config {
 	var config Config
-	config.DB.DSN = DefaultDSN
 	return config
 }
 
