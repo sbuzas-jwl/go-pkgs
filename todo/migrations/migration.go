@@ -4,5 +4,5 @@ import (
 	"embed"
 )
 
-//go:embed sqlite
-var sqliteMigrations embed.FS
+//go:embed users/sqlite
+var usersSqllite embed.FS
