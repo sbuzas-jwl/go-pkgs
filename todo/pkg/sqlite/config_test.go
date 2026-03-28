@@ -1,4 +1,4 @@
-package database
+package sqlite
 
 import (
 	"testing"
@@ -71,7 +71,7 @@ func TestConfig_ConnectionURL(t *testing.T) {
 				}
 			}
 
-			if got, want := cfg.ConnectionURL(), tc.want; got != want {
+			if got, want := cfg.ConnectionURL().String(), tc.want; got != want {
 				t.Errorf("\ngot: %q \nwant: %q", got, want)
 			}
 		})

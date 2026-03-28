@@ -1,10 +1,9 @@
-package database
+package sqlite
 
 import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/sbuzas-jwl/go-pkgs/todo/pkg/secrets"
 )
@@ -15,11 +14,6 @@ type Config struct {
 	Path     string `env:"DB_PATH" json:",omitempty"`
 	User     string `env:"DB_USER" json:",omitempty"`
 	Password string `env:"DB_PASSWORD" json:"-"`
-
-	PoolMinConnections string        `env:"DB_POOL_MIN_CONNS" json:",omitempty"`
-	PoolMaxConnections string        `env:"DB_POOL_MAX_CONNS" json:",omitempty"`
-	PoolMaxConnLfe     time.Duration `env:"DB_POOL_MAX_CONN_LIFETIME, default=5m" json:",omitempty"`
-	PoolMaxConnIdle    time.Duration `env:"DB_POOL_MAX_CONN_IDLE_TIME, default=1m" json:",omitempty"`
 }
 
 func (c *Config) DatabaseConfig() *Config {
@@ -30,9 +24,11 @@ func (c *Config) SecretManagerConfig() *secrets.Config {
 	return &c.Secrets
 }
 
-func (c *Config) ConnectionURL() string {
+func (c *Config) ConnectionURL() *url.URL {
 	if c == nil {
-		return ":memory:"
+		return &url.URL{
+			Opaque: ":memory:",
+		}
 	}
 
 	u := &url.URL{
@@ -56,5 +52,5 @@ func (c *Config) ConnectionURL() string {
 	}
 	params = append(params, "journal_mode=wal")
 	u.RawQuery = strings.Join(params, "&")
-	return u.String()
+	return u
 }

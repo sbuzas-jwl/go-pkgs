@@ -1,4 +1,4 @@
-package todod
+package main
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"github.com/sbuzas-jwl/go-pkgs/todo"
 	"github.com/sbuzas-jwl/go-pkgs/todo/http"
 	"github.com/sbuzas-jwl/go-pkgs/todo/pkg/logging"
+	"github.com/sbuzas-jwl/go-pkgs/todo/pkg/sqlite"
+	"github.com/sethvargo/go-envconfig"
 )
 
 func main() {
@@ -21,7 +23,7 @@ func main() {
 	go func() { <-c; cancel() }()
 
 	// Initialize logging.
-	logger := logging.NewLogger("INFO")
+	logger := logging.NewLogger("DEBUG")
 	todo.SetLogger(logger)
 	//Initialize Error Handler
 	todo.SetErrorHandler(LogErrorHandler{logger})
@@ -36,6 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	logger.Debug("server running", "url", m.HTTPServer.URL())
 	// Wait for CTRL-C.
 	<-ctx.Done()
 
@@ -71,11 +74,6 @@ func NewMain() *Main {
 
 // Close gracefully stops the program.
 func (m *Main) Close() error {
-	if m.HTTPServer != nil {
-		if err := m.HTTPServer.Close(); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -83,15 +81,25 @@ func (m *Main) Close() error {
 // calling this function.
 func (m *Main) Run(ctx context.Context) (err error) {
 	// Instantiate services.
+	err = envconfig.ProcessWith(ctx, &envconfig.Config{
+		Target:   &m.Config,
+		Lookuper: envconfig.PrefixLookuper("TODO", envconfig.OsLookuper()),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to process config: %w", err)
+	}
 
 	// Copy configuration settings to the HTTP server.
-	m.HTTPServer.Addr = m.Config.HTTP.Addr
+	m.HTTPServer.Port = m.Config.HTTP.Port
 	m.HTTPServer.Domain = m.Config.HTTP.Domain
 
 	// Attach underlying services to the HTTP server.
-
+	m.HTTPServer.DB, err = sqlite.NewFromEnv(ctx, &m.Config.DB)
+	if err != nil {
+		return fmt.Errorf("no database: %w", err)
+	}
 	// Start the HTTP server.
-	if err := m.HTTPServer.Open(); err != nil {
+	if err := m.HTTPServer.Run(ctx); err != nil {
 		return err
 	}
 
@@ -115,14 +123,16 @@ const (
 
 type Config struct {
 	HTTP struct {
-		Addr   string `json:"addr"`
-		Domain string `json:"domain"`
-	} `json:"http"`
+		Port   int    `env:"HTTP_PORT"`
+		Domain string `env:"HTTP_DOMAIN"`
+	}
+	DB sqlite.Config
 }
 
 // DefaultConfig returns a new instance of Config with defaults set.
 func DefaultConfig() Config {
 	var config Config
+	config.HTTP.Port = 8080
 	return config
 }
 

@@ -10,21 +10,27 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sbuzas-jwl/go-pkgs/todo"
+	"github.com/sbuzas-jwl/go-pkgs/todo/pkg/logging"
+	"github.com/sbuzas-jwl/go-pkgs/todo/pkg/server"
+	"github.com/sbuzas-jwl/go-pkgs/todo/pkg/sqlite"
 	"golang.org/x/crypto/acme/autocert"
 )
 
 // ShutdownTimeout is the time given for outstanding requests to finish before shutdown.
-const ShutdownTimeout = 1 * time.Second
+const ShutdownTimeout = 5 * time.Second
 
 type Server struct {
-	ln     net.Listener
-	server *http.Server
+	server *server.Server
+	// server *http.Server
 	router *mux.Router
 
 	// Bind address & domain for the server's listener.
 	// If domain is specified, server is run on TLS using acme/autocert.
-	Addr   string
+	Port   int
 	Domain string
+
+	// Infra Dependencies
+	DB *sqlite.DB
 
 	// Services used by the various HTTP routes.
 }
@@ -33,7 +39,6 @@ type Server struct {
 func NewServer() *Server {
 	// Create a new server that wraps the net/http server & add a gorilla router.
 	s := &Server{
-		server: &http.Server{},
 		router: mux.NewRouter(),
 	}
 
@@ -41,20 +46,35 @@ func NewServer() *Server {
 	// Our router can be wrapped by another function handler to perform some
 	// middleware-like tasks that cannot be performed by actual middleware.
 	// This includes changing route paths for JSON endpoints & overriding methods.
-	s.server.Handler = http.HandlerFunc(s.router.ServeHTTP)
 
 	// Setup error handling routes.
-	s.router.NotFoundHandler = http.HandlerFunc(s.handleNotFound)
+	s.router.NotFoundHandler = server.RequestLogger(logging.DefaultLogger())(
+		http.HandlerFunc(s.handleNotFound),
+	)
+	return s
+}
 
+func (s *Server) configureRouter(ctx context.Context) {
 	// Setup a base router that for api endpoints.
 	router := s.router.PathPrefix("/").Subrouter()
-	router.Use(s.authenticate)
+	router.Use(
+		s.authenticate,
+		server.RequestLogger(logging.FromContext(ctx)),
+	)
 	// add additional global middlewares here
+	{
+		r := router.Host("localhost:8080").Subrouter()
+		r.Handle("/debug", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
+			w.WriteHeader(http.StatusTeapot)
+			fmt.Fprintf(w, `{"status":"i am a little teapot"}`)
+		}))
+	}
 	// Register unauthenticated routes.
-	// {
-	// 	r := s.router.PathPrefix("/").Subrouter()
-	// }
+	{
+		r := router.PathPrefix("/").Subrouter()
+		r.Handle("/healthz", server.HandleHealthz(s.DB))
+	}
 
 	// Register authenticated routes.
 	// {
@@ -65,49 +85,37 @@ func NewServer() *Server {
 	// 	s.registerDialMembershipRoutes(r)
 	// 	s.registerEventRoutes(r)
 	// }
-
-	return s
 }
 
-func (s *Server) Open() error {
+func (s *Server) Run(ctx context.Context) error {
 	// Validate settings.
-
+	s.configureRouter(ctx)
 	// Open a listener on our bind address.
+	var listner net.Listener
 	if s.Domain != "" {
-		s.ln = autocert.NewListener(s.Domain)
+		listner = autocert.NewListener(s.Domain)
 	} else {
-		ln, err := net.Listen("tcp", s.Addr)
+		addr := fmt.Sprintf(":%d", s.Port)
+		ln, err := net.Listen("tcp", addr)
 		if err != nil {
 			return err
 		}
-		s.ln = ln
+		listner = ln
 	}
 
-	// Begin serving requests on the listener. We use Serve() instead of
-	// ListenAndServe() because it allows us to check for listen errors (such
-	// as trying to use an already open port) synchronously.
+	server, err := server.NewFromListener(listner)
+	if err != nil {
+		todo.Handle(err)
+	}
+
+	s.server = server
 	go func() {
-		if err := s.server.Serve(s.ln); !errors.Is(err, http.ErrServerClosed) {
+		if err := s.server.ServeHTTPHandler(ctx, s.router); !errors.Is(err, http.ErrServerClosed) {
 			todo.Handle(err)
 		}
 	}()
+
 	return nil
-}
-
-// Close gracefully shuts down the server.
-func (s *Server) Close() error {
-	ctx, cancel := context.WithTimeout(context.Background(), ShutdownTimeout)
-	defer cancel()
-	return s.server.Shutdown(ctx)
-}
-
-// Port returns the TCP port for the running server.
-// This is useful in tests where we allocate a random port by using ":0".
-func (s *Server) Port() int {
-	if s.ln == nil {
-		return 0
-	}
-	return s.ln.Addr().(*net.TCPAddr).Port
 }
 
 // UseTLS returns true if the cert & key file are specified.
@@ -125,7 +133,7 @@ func (s *Server) Scheme() string {
 
 // URL returns the local base URL of the running server.
 func (s *Server) URL() string {
-	scheme, port := s.Scheme(), s.Port()
+	scheme, port := s.Scheme(), s.server.Port()
 
 	// Use localhost unless a domain is specified.
 	domain := "localhost"
@@ -137,7 +145,7 @@ func (s *Server) URL() string {
 	if (scheme == "http" && port == 80) || (scheme == "https" && port == 443) {
 		return fmt.Sprintf("%s://%s", s.Scheme(), domain)
 	}
-	return fmt.Sprintf("%s://%s:%d", s.Scheme(), domain, s.Port())
+	return fmt.Sprintf("%s://%s:%d", s.Scheme(), domain, s.server.Port())
 }
 
 // reportPanic is middleware for catching panics and reporting them.
